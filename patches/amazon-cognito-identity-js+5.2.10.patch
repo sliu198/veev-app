@@ -1,0 +1,128 @@
+diff --git a/node_modules/amazon-cognito-identity-js/lib/CognitoUser.js b/node_modules/amazon-cognito-identity-js/lib/CognitoUser.js
+index 384d3b2..e3237c4 100644
+--- a/node_modules/amazon-cognito-identity-js/lib/CognitoUser.js
++++ b/node_modules/amazon-cognito-identity-js/lib/CognitoUser.js
+@@ -169,6 +169,7 @@ var CognitoUser = /*#__PURE__*/function () {
+ 
+     var authParameters = authDetails.getAuthParameters();
+     authParameters.USERNAME = this.username;
++    authParameters.SECRET_HASH = this.getSecretHash();
+     var clientMetaData = Object.keys(authDetails.getValidationData()).length !== 0 ? authDetails.getValidationData() : authDetails.getClientMetadata();
+     var jsonReq = {
+       AuthFlow: 'CUSTOM_AUTH',
+@@ -260,6 +261,7 @@ var CognitoUser = /*#__PURE__*/function () {
+     }
+ 
+     authParameters.USERNAME = this.username;
++    authParameters.SECRET_HASH = this.getSecretHash();
+     authenticationHelper.getLargeAValue(function (errOnAValue, aValue) {
+       // getLargeAValue callback start
+       if (errOnAValue) {
+@@ -316,6 +318,7 @@ var CognitoUser = /*#__PURE__*/function () {
+           challengeResponses.PASSWORD_CLAIM_SECRET_BLOCK = challengeParameters.SECRET_BLOCK;
+           challengeResponses.TIMESTAMP = dateNow;
+           challengeResponses.PASSWORD_CLAIM_SIGNATURE = signatureString;
++          challengeResponses.SECRET_HASH = _this2.getSecretHash();
+ 
+           if (_this2.deviceKey != null) {
+             challengeResponses.DEVICE_KEY = _this2.deviceKey;
+@@ -383,6 +386,7 @@ var CognitoUser = /*#__PURE__*/function () {
+     var authParameters = {};
+     authParameters.USERNAME = this.username;
+     authParameters.PASSWORD = authDetails.getPassword();
++    authParameters.SECRET_HASH = this.getSecretHash();
+ 
+     if (!authParameters.PASSWORD) {
+       callback.onFailure(new Error('PASSWORD parameter is required'));
+@@ -569,6 +573,7 @@ var CognitoUser = /*#__PURE__*/function () {
+ 
+     finalUserAttributes.NEW_PASSWORD = newPassword;
+     finalUserAttributes.USERNAME = this.username;
++    finalUserAttributes.SECRET_HASH = this.getSecretHash();
+     var jsonReq = {
+       ChallengeName: 'NEW_PASSWORD_REQUIRED',
+       ClientId: this.pool.getClientId(),
+@@ -611,6 +616,7 @@ var CognitoUser = /*#__PURE__*/function () {
+     var authParameters = {};
+     authParameters.USERNAME = this.username;
+     authParameters.DEVICE_KEY = this.deviceKey;
++    authParameters.SECRET_HASH = this.getSecretHash();
+     authenticationHelper.getLargeAValue(function (errAValue, aValue) {
+       // getLargeAValue callback start
+       if (errAValue) {
+@@ -658,6 +664,7 @@ var CognitoUser = /*#__PURE__*/function () {
+           challengeResponses.TIMESTAMP = dateNow;
+           challengeResponses.PASSWORD_CLAIM_SIGNATURE = signatureString;
+           challengeResponses.DEVICE_KEY = _this6.deviceKey;
++          challengeResponses.SECRET_HASH = _this6.getSecretHash();
+           var jsonReqResp = {
+             ChallengeName: 'DEVICE_PASSWORD_VERIFIER',
+             ClientId: _this6.pool.getClientId(),
+@@ -738,6 +745,7 @@ var CognitoUser = /*#__PURE__*/function () {
+     var challengeResponses = {};
+     challengeResponses.USERNAME = this.username;
+     challengeResponses.ANSWER = answerChallenge;
++    challengeResponses.SECRET_HASH = this.getSecretHash();
+     var authenticationHelper = new _AuthenticationHelper["default"](this.pool.getUserPoolId().split('_')[1]);
+     this.getCachedDeviceKeyAndPassword();
+ 
+@@ -783,6 +791,8 @@ var CognitoUser = /*#__PURE__*/function () {
+     var challengeResponses = {};
+     challengeResponses.USERNAME = this.username;
+     challengeResponses.SMS_MFA_CODE = confirmationCode;
++    challengeResponses.SECRET_HASH = this.getSecretHash();
++
+     var mfaTypeSelection = mfaType || 'SMS_MFA';
+ 
+     if (mfaTypeSelection === 'SOFTWARE_TOKEN_MFA') {
+@@ -1379,6 +1389,7 @@ var CognitoUser = /*#__PURE__*/function () {
+       var deviceKeyKey = keyPrefix + "." + this.username + ".deviceKey";
+       this.deviceKey = this.storage.getItem(deviceKeyKey);
+       authParameters.DEVICE_KEY = this.deviceKey;
++      authParameters.SECRET_HASH = this.getSecretHash();
+     }
+ 
+     var jsonReq = {
+@@ -1982,6 +1993,8 @@ var CognitoUser = /*#__PURE__*/function () {
+     var challengeResponses = {};
+     challengeResponses.USERNAME = this.username;
+     challengeResponses.ANSWER = answerChallenge;
++    challengeResponses.SECRET_HASH = this.getSecretHash();
++
+     var jsonReq = {
+       ChallengeName: 'SELECT_MFA_TYPE',
+       ChallengeResponses: challengeResponses,
+@@ -2079,6 +2092,7 @@ var CognitoUser = /*#__PURE__*/function () {
+         _this21.Session = data.Session;
+         var challengeResponses = {};
+         challengeResponses.USERNAME = _this21.username;
++        challengeResponses.SECRET_HASH = _this21.getSecretHash();
+         var jsonReq = {
+           ChallengeName: 'MFA_SETUP',
+           ClientId: _this21.pool.getClientId(),
+@@ -2119,6 +2133,12 @@ var CognitoUser = /*#__PURE__*/function () {
+     }
+   };
+ 
++  _proto.getSecretHash = function() {
++    if (!this.pool.getSecretHashForUsername) return;
++
++    return this.pool.getSecretHashForUsername(this.username)
++  }
++
+   return CognitoUser;
+ }();
+ 
+diff --git a/node_modules/amazon-cognito-identity-js/lib/CognitoUserPool.js b/node_modules/amazon-cognito-identity-js/lib/CognitoUserPool.js
+index 5d0fdc3..c42bb49 100644
+--- a/node_modules/amazon-cognito-identity-js/lib/CognitoUserPool.js
++++ b/node_modules/amazon-cognito-identity-js/lib/CognitoUserPool.js
+@@ -64,6 +64,8 @@ var CognitoUserPool = /*#__PURE__*/function () {
+     if (wrapRefreshSessionCallback) {
+       this.wrapRefreshSessionCallback = wrapRefreshSessionCallback;
+     }
++
++    this.getSecretHashForUsername = _ref.getSecretHashForUsername;
+   }
+   /**
+    * @returns {string} the user pool id
