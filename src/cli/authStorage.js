@@ -1,7 +1,7 @@
-const {readFileSync, writeFileSync, accessSync, constants: {R_OK, W_OK}} = require('fs');
+const {readFileSync, writeFileSync} = require('fs');
 const path = require('path');
 
-const STORAGE_PATH = path.resolve(__dirname, '..', 'storage.json');
+const STORAGE_PATH = path.resolve(__dirname, 'storage.json');
 
 let storage = {}
 

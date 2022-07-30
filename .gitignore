@@ -1,3 +1,5 @@
 /node_modules/
-/storage.json
+/src/cli/storage.json
 /.idea/
+/dist/
+/.parcel-cache/

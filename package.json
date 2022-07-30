@@ -2,8 +2,11 @@
   "name": "veev-app",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "source": "src/index.html",
   "scripts": {
+    "build": "parcel build",
+    "cli": "node src/cli",
+    "start": "parcel",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
@@ -13,9 +16,16 @@
     "inquirer": "^8.2.4",
     "lodash": "^4.17.21",
     "patch-package": "^6.4.7",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "yargs": "^17.5.1"
   },
   "devDependencies": {
-    "global-agent": "^3.0.0"
+    "crypto-browserify": "^3.12.0",
+    "events": "^3.3.0",
+    "parcel": "^2.6.2",
+    "process": "^0.11.10",
+    "querystring-es3": "^0.2.1",
+    "stream-browserify": "^3.0.0"
   }
 }

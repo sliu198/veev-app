@@ -4,7 +4,7 @@ module.exports = makeLoginPrompt;
 
 async function makeLoginPrompt() {
   const prompt = createPromptModule();
-  return await prompt([
+  return prompt([
     {
       name: 'email',
       message: 'Email: '
@@ -14,5 +14,5 @@ async function makeLoginPrompt() {
       message: 'Password: ',
       type: 'password'
     }
-  ])
+  ], {})
 }
