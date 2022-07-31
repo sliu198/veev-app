@@ -13,14 +13,13 @@ const QUERY = {
   GetStructure(house_id: $houseId) {
     name
     rooms {
+      room_id
       name
       devices {
         name
         device_id
         capabilities {
           name
-          type
-          readOnly
         }
       }
     }
@@ -63,6 +62,8 @@ const MUTATION = {
 
 module.exports = {
   request,
+  getLayouts,
+  getDeviceStateMap,
   QUERY,
   MUTATION,
 }
@@ -82,13 +83,102 @@ async function request(query, variables) {
     })
   })
 
-  const {data, errors} = (await response.json()) || {};
-
   if (response.ok) {
+    const {data, errors} = await response.json();
+    if (errors?.length) {
+      const error = new Error('GraphQL error');
+      error.data = {errors};
+      throw error;
+    }
     return data;
   }
 
-  const error = new Error(response.statusText);
-  error.data = {errors};
-  throw error;
+  throw new Error(`${response.statusText}: ${await response.text()}`);
+}
+
+/**
+ * @typedef House
+ * @prop {string} id
+ * @prop {string} name
+ * @prop {Array<Room>} rooms
+ * @prop {Array<Mode>} modes
+ */
+
+/**
+ * @typedef Room
+ * @prop {string} name
+ * @prop {Array<Device>} devices
+ */
+
+/**
+ * @typedef Device
+ * @prop {string} id
+ * @prop {string} name
+ */
+
+/**
+ * @typedef Mode
+ * @prop {string} id
+ * @prop {string} name
+ */
+
+/**
+ * Convenience method for listing all modes and devices in all houses
+ * @returns {Promise<Array<House>>}
+ */
+async function getLayouts() {
+  const {ListHouses: houses} = await request(QUERY.LIST_HOUSES, {});
+  const layouts = [];
+  for (const {house_id: houseId, name} of houses) {
+    const house = {id: houseId, name, rooms: []}
+    layouts.push(house);
+
+    const {GetModes: modes} = await request(QUERY.GET_MODES, {houseId});
+    house.modes = modes;
+
+    const {GetStructure: floors} = await request(QUERY.GET_STRUCTURE, {houseId});
+    for (const {name: floorName, rooms} of floors) {
+      for (const {room_id: id, name: roomName, devices} of rooms) {
+        const room = {id, name: `${floorName}/${roomName}`, devices: []}
+        house.rooms.push(room);
+
+        for (const {device_id: id, name, capabilities} of devices) {
+          if (capabilities.some(({name}) => name === 'brightness')) {
+            const device = {id, name};
+            room.devices.push(device);
+          }
+        }
+      }
+    }
+  }
+
+  return layouts;
+}
+
+/**
+ * @typedef DeviceState
+ * @property {string} powerState
+ * @property {string} brightness
+ * @property {string} onBrightness
+ */
+
+/**
+ *
+ * @param {Array<string>} deviceIds
+ * @returns {Promise<{[id:string]: DeviceState}>}
+ */
+async function getDeviceStateMap(deviceIds) {
+  const {GetDevicesStates: devicesStates} = await request(QUERY.GET_DEVICES_STATES, {deviceIds});
+  const deviceStateMap = {};
+  for (const {id, states} of devicesStates) {
+    const deviceState = {}
+    deviceStateMap[id] = deviceState;
+    for (const {name, value} of states) {
+      if (['powerState', 'brightness', 'onBrightness'].includes(name)) {
+        deviceState[name] = value;
+      }
+    }
+  }
+
+  return deviceStateMap;
 }

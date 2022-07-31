@@ -2,6 +2,7 @@ import React, {useCallback, useEffect, useState} from "react";
 
 import auth from './auth';
 import SignInForm from "./SignInForm";
+import HomeDashboard from "./HomeDashboard";
 
 const PAGE_LOAD_ERROR_MESSAGE = 'There was an error loading this page. Please refresh to try again.'
 
@@ -40,7 +41,7 @@ export function App() {
     {isLoading
       ? <div>Loading...</div>
       : hasAuth
-        ? <div>Main App Placeholder</div>
+        ? <HomeDashboard/>
         : <SignInForm onSubmit={signIn}/>
     }
   </ErrorBoundary>

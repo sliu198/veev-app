@@ -4,7 +4,7 @@ const {readFileSync} = require('fs');
 const path = require('path');
 
 const storage = require('./authStorage');
-const {QUERY, MUTATION, request} = require('../api');
+const {QUERY, MUTATION, request, getLayouts, getDeviceStateMap} = require('../api');
 
 const auth = require('../auth');
 const makeLoginPrompt = require('./makeLoginPrompt');
@@ -72,47 +72,30 @@ async function signIn() {
 }
 
 async function describe() {
-  const roomDisplay = [];
-  const lightIdToLight = {};
-
-  const { ListHouses } = await request(QUERY.LIST_HOUSES, {});
-  for (const { house_id: houseId, name: houseName } of ListHouses) {
-    const { GetModes } = await request(QUERY.GET_MODES, {houseId});
-    const modes = {name:`${houseName}/Modes`, lights: []};
-    for (const {id, name} of GetModes) {
-      modes.lights.push({id, name});
-    }
-    if (modes.lights.length > 0) {
-      roomDisplay.push(modes);
-    }
-
-    const { GetStructure } = await request(QUERY.GET_STRUCTURE, {houseId});
-    for (const { rooms, name: floorName} of GetStructure) {
-      for (const {name: roomName, devices} of rooms) {
-        const room = {name: `${houseName}/${floorName}/${roomName}`, lights: []};
-        roomDisplay.push(room);
-
-        devices.forEach(({device_id: id, name, capabilities}) => {
-          if (capabilities.some(({name}) => name === 'brightness')) {
-            const light = {id, name};
-            room.lights.push(light);
-            lightIdToLight[id] = light;
-          }
-        })
+  const houses = await getLayouts();
+  const deviceIds = [];
+  for (const {rooms} of houses) {
+    for (const {devices} of rooms) {
+      for (const {id} of devices) {
+        deviceIds.push(id);
       }
     }
   }
 
-  const { GetDevicesStates } = await request(QUERY.GET_DEVICES_STATES, {deviceIds: _.keys(lightIdToLight)});
-  for (const {id, states} of GetDevicesStates) {
-    const {value: brightness} = states.find(state => state.name === 'brightness');
-    lightIdToLight[id].brightness = brightness;
-  }
+  const deviceStateMap = await getDeviceStateMap(deviceIds);
 
-  for (const {name, lights} of roomDisplay) {
-    console.log(name);
-    for (const {id, name, brightness} of lights) {
-      console.log(`  ${id} : ${name} ${brightness ?? ''}`)
+  for (const { name: houseName, modes, rooms } of houses) {
+    console.log(`${houseName}/Modes`);
+    for (const {id, name} of modes) {
+      console.log(`  ${id} : ${name}`);
+    }
+
+    for (const {name: roomName, devices} of rooms) {
+      console.log(`${houseName}/${roomName}`);
+      for (const {id, name} of devices) {
+        const {powerState, brightness, onBrightness} = deviceStateMap[id];
+        console.log(`  ${id} : ${name} ${powerState === 'true' ? `[${brightness}]` : onBrightness}`);
+      }
     }
   }
 }
