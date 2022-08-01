@@ -1,0 +1,24 @@
+html {
+    font-size: 16px;
+    font-family: sans-serif;
+    color: #c0dfff;
+    background-color: black;
+}
+
+#app {
+    margin: 0 auto;
+    max-width: min(75em, 100vw)
+}
+
+button, input {
+    background: none;
+    color: inherit;
+    border: .125em solid #007eb7;
+    border-radius: .25em;
+    padding: .5em;
+    margin: .5em;
+    font: inherit;
+}
+
+.device-control:disabled {
+}

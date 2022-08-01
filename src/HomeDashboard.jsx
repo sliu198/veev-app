@@ -1,5 +1,8 @@
 import {useCallback, useEffect, useState} from "react";
 import {MUTATION, request, getLayouts, getDeviceStateMap} from './api';
+import ControlGroup from "./ControlGroup";
+import ModeButton from "./ModeButton";
+import DeviceControl from "./DeviceControl";
 
 export default function HomeDashboard() {
   const [layouts, setLayouts] = useState(null)
@@ -16,12 +19,29 @@ export default function HomeDashboard() {
     }
 
     setDeviceStateMap(await getDeviceStateMap(deviceIds));
-  }, [layouts, setDeviceStateMap, deviceStateMap]);
+  }, [layouts, setDeviceStateMap]);
 
   const refreshLayouts = useCallback(async () => {
     const layouts = await getLayouts()
     setLayouts(layouts);
   }, [setLayouts])
+
+  const activateMode = useCallback(async (modeId) => {
+    await request(MUTATION.ACTIVATE_MODE, {modeId});
+    await refreshDeviceStates();
+  }, [refreshDeviceStates]);
+
+  const togglePower = useCallback(async (deviceId) => {
+    const powerState = JSON.stringify(deviceStateMap[deviceId].powerState === 'false');
+    await request(MUTATION.SET_POWER, {deviceId, powerState})
+    await refreshDeviceStates();
+  }, [refreshDeviceStates, deviceStateMap])
+
+  const changeBrightness = useCallback(async (deviceId, brightness) => {
+    const powerState = JSON.stringify(deviceStateMap[deviceId].state.powerState === 'false');
+    await request(MUTATION.SET_POWER, {deviceId, powerState})
+    await refreshDeviceStates();
+  }, [refreshDeviceStates]);
 
   useEffect(() => {
     refreshLayouts();
@@ -40,67 +60,49 @@ export default function HomeDashboard() {
           key={layout.id}
           layout={layout}
           deviceStateMap={deviceStateMap}
+          activateMode={activateMode}
+          togglePower={togglePower}
+          changeBrightness={changeBrightness}
           refreshDeviceStates={refreshDeviceStates}
         />)
     }
   </div>;
 }
 
-function HouseStatus({layout: {name, modes, rooms}, deviceStateMap, refreshDeviceStates}) {
+function HouseStatus(
+  {
+    layout: {name, modes, rooms},
+    deviceStateMap,
+    activateMode,
+    togglePower,
+    changeBrightness,
+    refreshDeviceStates
+  }) {
+
   return <div>
     <h1>{name}</h1>
-    <h2>Modes</h2>
-    <ul>
-      {modes.map((mode) => {
-        return <li key={mode.id}>
-          <ModeButton mode={mode} refreshDeviceStates={refreshDeviceStates}/>
-        </li>
-      })}
-    </ul>
+    <ControlGroup>
+      <h2>Modes</h2>
+      {
+        modes.map((mode) => <ModeButton
+          key={mode.id}
+          mode={mode}
+          activateMode={activateMode}
+        />)
+      }
+    </ControlGroup>
     {
-      rooms.map(({id, name, devices}) => {
-        return <div key={id}>
-          <h2>{name}</h2>
-          <ul>
-            {
-              devices.map(({id, name}) => {
-                return <li key={id}>
-                  <DeviceControls device={{id, name, state: deviceStateMap[id]}} refreshDeviceStates={refreshDeviceStates}/>
-                </li>
-              })
-            }
-          </ul>
-        </div>
-      })
+      rooms.map(({id, name, devices}) => <ControlGroup key={id}>
+        <h2>{name}</h2>
+        {
+          devices.map(({id, name}) => <DeviceControl
+            key={id}
+            device={{id, name, state: deviceStateMap[id]}}
+            togglePower={togglePower}
+            changeBrightness={changeBrightness}
+          />)
+        }
+      </ControlGroup>)
     }
-  </div>
-}
-
-function ModeButton({mode: {id, name}, refreshDeviceStates}) {
-  const onClick = useCallback(async () => {
-    await request(MUTATION.ACTIVATE_MODE, {modeId: id});
-    await refreshDeviceStates();
-  }, [id, refreshDeviceStates])
-  return <button onClick={onClick}>{name}</button>
-}
-
-function DeviceControls({device: {id, name, state: {powerState, brightness, onBrightness}}, refreshDeviceStates}) {
-  const isOn = powerState === 'true'
-
-  const togglePower = useCallback(async ({target: {checked: powerState}}) => {
-    await request(MUTATION.SET_POWER, {deviceId: id, powerState: String(powerState)})
-    await refreshDeviceStates([id])
-  }, [id, isOn, refreshDeviceStates])
-
-  const changeBrightness = useCallback(async ({target: {value: brightness}}) => {
-    await(MUTATION.SET_BRIGHTNESS, {deviceId: id, brightness})
-    await refreshDeviceStates([id])
-  }, [id, refreshDeviceStates])
-
-  return <div>
-    <input type="checkbox" checked={isOn} onChange={togglePower}/>
-    <span>{name}</span>
-    {/*TODO: control brightness*/}
-    <input disabled value={isOn ? brightness : onBrightness}/>
   </div>
 }

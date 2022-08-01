@@ -1,0 +1,17 @@
+.DeviceControl {
+    position: relative;
+}
+
+.DeviceControlBrightness {
+    position:absolute;
+    height: 100%;
+    top: 0;
+    left: 0;
+    background-color: #002337;
+    border: .125em;
+    z-index: -10;
+}
+
+.DeviceControlBrightness.DeviceControlBrightnessOn {
+    background-color: #003f5f;
+}
