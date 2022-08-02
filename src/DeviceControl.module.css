@@ -1,17 +1,38 @@
 .DeviceControl {
-    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 1em;
 }
 
-.DeviceControlBrightness {
-    position:absolute;
-    height: 100%;
+.DeviceControlButton {
+    background: linear-gradient(to top, var(--bg-color-off) 0 var(--brightness), black var(--brightness) 100%);
+    min-width: 5em;
+    min-height: 5em;
+    border-radius: 50%;
+}
+
+.DeviceControlButtonOn {
+    background: linear-gradient(to top, var(--bg-color-on) 0 var(--brightness), var(--bg-color-off) var(--brightness) 100%);
+}
+
+.DeviceControlBrightnessModal {
+    position: fixed;
     top: 0;
     left: 0;
-    background-color: #002337;
-    border: .125em;
-    z-index: -10;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0,0,0,calc(1 - var(--newBrightnessValue) / 200));
 }
 
-.DeviceControlBrightness.DeviceControlBrightnessOn {
-    background-color: #003f5f;
+.DeviceControlBrightnessModalBrightnessText {
+    font-size: 4em;
+}
+
+.DeviceControlBrightnessModalDeviceName {
+    font-size: 2em;
 }

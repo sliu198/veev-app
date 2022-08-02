@@ -1,7 +1,11 @@
 html {
+    --text-color: #c0dfff;
+    --border-color: #003f5f;
+    --bg-color-on: #005e89;
+    --bg-color-off: #002337;
     font-size: 16px;
     font-family: sans-serif;
-    color: #c0dfff;
+    color: var(--text-color);
     background-color: black;
 }
 
@@ -13,9 +17,9 @@ html {
 button, input {
     background: none;
     color: inherit;
-    border: .125em solid #007eb7;
+    border: .125em solid var(--border-color);
     border-radius: .25em;
-    padding: .5em;
+    padding: 1em;
     margin: .5em;
     font: inherit;
 }

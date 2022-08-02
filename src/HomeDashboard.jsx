@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useState} from "react";
 import {MUTATION, request, getLayouts, getDeviceStateMap} from './api';
 import ControlGroup from "./ControlGroup";
-import ModeButton from "./ModeButton";
+import ModeControl from "./ModeControl";
 import DeviceControl from "./DeviceControl";
 
 export default function HomeDashboard() {
@@ -38,8 +38,7 @@ export default function HomeDashboard() {
   }, [refreshDeviceStates, deviceStateMap])
 
   const changeBrightness = useCallback(async (deviceId, brightness) => {
-    const powerState = JSON.stringify(deviceStateMap[deviceId].state.powerState === 'false');
-    await request(MUTATION.SET_POWER, {deviceId, powerState})
+    await request(MUTATION.SET_BRIGHTNESS, {deviceId, brightness: String(brightness)})
     await refreshDeviceStates();
   }, [refreshDeviceStates]);
 
@@ -84,7 +83,7 @@ function HouseStatus(
     <ControlGroup>
       <h2>Modes</h2>
       {
-        modes.map((mode) => <ModeButton
+        modes.map((mode) => <ModeControl
           key={mode.id}
           mode={mode}
           activateMode={activateMode}
