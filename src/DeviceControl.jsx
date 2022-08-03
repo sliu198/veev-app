@@ -1,4 +1,4 @@
-import {useState, useCallback} from 'react';
+import {useState, useCallback, useRef, useEffect} from 'react';
 import * as classes from './DeviceControl.module.css'
 import {createPortal} from "react-dom";
 
@@ -18,32 +18,23 @@ export default function DeviceControl(
   const ariaLabel=[name, isOn ? 'on' : 'off', brightnessDisplay].join(', ')
   const buttonClassName = [classes.DeviceControlButton, isOn ? classes.DeviceControlButtonOn : null].join(' ');
 
-  const [newBrightnessValue, setNewBrightnessValue] = useState(null);
+  const [shouldShowBrightnessInput, setShouldShowBrightnessInput] = useState(false);
 
   const onTogglePower = useCallback(() => togglePower(id), [togglePower, id]);
-  const onChangeBrightnessInput = useCallback((delta) => {
-    setNewBrightnessValue(brightness => {
-      return Math.min(Math.max(brightness + delta, 0),100);
-    });
-  }, [setNewBrightnessValue]);
-  const onCommitBrightnessChange = useCallback(async () => {
-    const brightness = newBrightnessValue
-    setNewBrightnessValue(null);
-    await changeBrightness(id, brightness);
-  }, [id, newBrightnessValue, setNewBrightnessValue, changeBrightness])
-  const onDisplayBrightnessInput = useCallback((event) => {
+  const showBrightnessInput = useCallback((event) => {
     event.preventDefault();
-    setNewBrightnessValue(brightnessValue);
-  }, [setNewBrightnessValue, brightnessValue]);
-  const onMouseChangeBrightness = useCallback(event => {
-    onChangeBrightnessInput(-event.movementY)
-  }, [onChangeBrightnessInput]);
+    setShouldShowBrightnessInput(true);
+  }, [setShouldShowBrightnessInput]);
+  const commitBrightnessChange = useCallback(async (value) => {
+    setShouldShowBrightnessInput(false);
+    await changeBrightness(id, value);
+  }, [id, changeBrightness])
 
   return <label className={className} aria-label={ariaLabel} {...restProps}>
     <button
       className={buttonClassName}
       onClick={onTogglePower}
-      onContextMenu={onDisplayBrightnessInput}
+      onContextMenu={showBrightnessInput}
       disabled={disabled}
       style={{'--brightness': brightnessDisplay}}
     >
@@ -52,15 +43,105 @@ export default function DeviceControl(
     <div>{name}</div>
 
     {/*TODO: touch handlers for changing brightness*/}
-    {newBrightnessValue != null && createPortal(<div
-        onMouseUp={onCommitBrightnessChange}
-        onMouseMove={onMouseChangeBrightness}
-        onClick={() => setNewBrightnessValue(null)}
-        className={classes.DeviceControlBrightnessModal}
-        style={{'--newBrightnessValue': newBrightnessValue}}>
-        <div className={classes.DeviceControlBrightnessModalBrightnessText}>{`${newBrightnessValue}%`}</div>
-        <div className={classes.DeviceControlBrightnessModalDeviceName}>{name}</div>
-      </div>,
+    {shouldShowBrightnessInput && createPortal(
+      <BrightnessInput name={name} initialValue={brightnessValue} onChange={commitBrightnessChange}/>,
       document.getElementById('app'))}
   </label>
+}
+
+function BrightnessInput({name, initialValue, onChange}) {
+  const [value, setValue] = useState(initialValue);
+
+  const onChangeBrightness = useCallback(delta => {
+    setValue(value => Math.min(Math.max(value + delta, 0), 100));
+  }, [setValue])
+
+  const onMouseMove = useCallback(event => {
+    onChangeBrightness(-event.movementY)
+  }, [onChangeBrightness]);
+
+  const commitChange = useCallback(() => {
+    onChange(value);
+  }, [onChange, value])
+
+  const [activeTouchId, setActiveTouchId] = useState(null);
+  const [, setLastY] = useState(null);
+
+  const onTouchStart = useCallback((event) => {
+    event.preventDefault();
+
+    setActiveTouchId(activeTouchId => {
+      if (activeTouchId) return activeTouchId
+
+      const startedTouch = event.changedTouches[0];
+      setLastY(startedTouch.clientY)
+      return startedTouch.identifier;
+    });
+  }, [setActiveTouchId])
+  const onTouchMove = useCallback((event) => {
+    event.preventDefault();
+
+    const currentTouch = findTouchInList(activeTouchId, event.targetTouches);
+    if (!currentTouch) return;
+    setLastY(lastY => {
+      const nextY = currentTouch.clientY;
+      onChangeBrightness(lastY - nextY);
+      return nextY;
+    })
+  }, [activeTouchId, setLastY]);
+  const onTouchEnd = useCallback((event) => {
+    event.preventDefault();
+
+    if (activeTouchId == null) return;
+    const currentTouch = findTouchInList(activeTouchId, event.targetTouches);
+    if (currentTouch) return;
+
+    setActiveTouchId(null);
+    commitChange();
+  }, [activeTouchId, setActiveTouchId, commitChange]);
+  const onTouchCancel = useCallback(event => {
+    if (activeTouchId == null) return;
+    const currentTouch = findTouchInList(activeTouchId, event.targetTouches);
+    if (currentTouch) return;
+
+    setActiveTouchId(null);
+    setValue(initialValue);
+  }, [activeTouchId, setActiveTouchId, setValue]);
+
+  const ref = useRef(null);
+  useEffect(() => {
+    const {current} = ref;
+    if (!current) return;
+
+    current.addEventListener('touchstart', onTouchStart, {passive: false});
+    current.addEventListener('touchmove', onTouchMove, {passive: false});
+    current.addEventListener('touchend', onTouchEnd, {passive: false});
+
+    return () => {
+      current.removeEventListener('touchmove', onTouchStart);
+      current.removeEventListener('touchstart', onTouchMove);
+      current.removeEventListener('touchend', onTouchEnd);
+    }
+  }, [ref, onTouchStart, onTouchMove, onTouchEnd]);
+
+  return <div
+    ref={ref}
+    onMouseUp={commitChange}
+    onMouseMove={onMouseMove}
+    onTouchCancel={onTouchCancel}
+    className={classes.DeviceControlBrightnessModal}
+    style={{'--newBrightnessValue': value}}>
+    <div className={classes.DeviceControlBrightnessModalBrightnessText}>{`${value}%`}</div>
+    <div className={classes.DeviceControlBrightnessModalDeviceName}>{name}</div>
+  </div>
+}
+
+function findTouchInList(id, touchList) {
+  if (id == null) return null;
+
+  for (let i = 0; i < touchList.length; i++) {
+    const current = touchList.item(i);
+
+    if (current.identifier === id) return current;
+  }
 }
