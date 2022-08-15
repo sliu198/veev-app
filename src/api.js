@@ -1,6 +1,7 @@
 const {getAccessToken} = require('./auth');
 
-const BASE_URL = 'https://5cyxxyn4bjho7b7zyqcn3vo3cm.appsync-api.us-east-1.amazonaws.com/graphql'
+const HOSTNAME = '5cyxxyn4bjho7b7zyqcn3vo3cm.appsync-api.us-east-1.amazonaws.com'
+const BASE_URL = `https://${HOSTNAME}/graphql`
 
 const QUERY = {
   LIST_HOUSES: `{
@@ -66,6 +67,7 @@ module.exports = {
   getDeviceStateMap,
   QUERY,
   MUTATION,
+  HOSTNAME,
 }
 
 async function request(query, variables) {

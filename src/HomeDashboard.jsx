@@ -3,10 +3,12 @@ import {MUTATION, request, getLayouts, getDeviceStateMap} from './api';
 import ControlGroup from "./ControlGroup";
 import ModeControl from "./ModeControl";
 import DeviceControl from "./DeviceControl";
+import ServerUpdateListener from "./ServerUpdateListener";
 
 export default function HomeDashboard() {
   const [layouts, setLayouts] = useState(null)
   const [deviceStateMap, setDeviceStateMap] = useState(null);
+  const [serverUpdateListener, setServerUpdateListener] = useState(null);
 
   const refreshDeviceStates = useCallback(async () => {
     const deviceIds = [];
@@ -28,28 +30,70 @@ export default function HomeDashboard() {
 
   const activateMode = useCallback(async (modeId) => {
     await request(MUTATION.ACTIVATE_MODE, {modeId});
-    await refreshDeviceStates();
   }, [refreshDeviceStates]);
 
   const togglePower = useCallback(async (deviceId) => {
     const powerState = JSON.stringify(deviceStateMap[deviceId].powerState === 'false');
     await request(MUTATION.SET_POWER, {deviceId, powerState})
-    await refreshDeviceStates();
   }, [refreshDeviceStates, deviceStateMap])
 
   const changeBrightness = useCallback(async (deviceId, brightness) => {
     await request(MUTATION.SET_BRIGHTNESS, {deviceId, brightness: String(brightness)})
-    await refreshDeviceStates();
   }, [refreshDeviceStates]);
+
+  const updateDeviceState = useCallback((updatePayload) => {
+    const {data: {OnServerEvent: {name, payload}}} = updatePayload
+    if (name !== 'DEVICE_UPDATED') return;
+
+    let payloadPojo;
+    try {
+      payloadPojo = JSON.parse(payload);
+    } catch (error) {
+      const rethrownError = new Error('error parsing device update payload');
+      rethrownError.data = {error, payload};
+      console.error(rethrownError);
+      return;
+    }
+
+    const {id: deviceId, states} = payloadPojo;
+    setDeviceStateMap(deviceStateMap => {
+      if (!deviceStateMap[deviceId]) return deviceStateMap;
+
+      const deviceState = {};
+      for (const {name, value} of states) {
+        deviceState[name] = value;
+      }
+
+      return {
+        ...deviceStateMap,
+        [deviceId]: deviceState,
+      }
+    });
+  }, [setDeviceStateMap])
 
   useEffect(() => {
     refreshLayouts();
   },[])
 
   useEffect(() => {
+    const serverUpdateListener = new ServerUpdateListener(() => {});
+    serverUpdateListener.connect().then((listener) => {
+      setServerUpdateListener(listener);
+    });
+    return () => serverUpdateListener.close();
+  }, [])
+
+  useEffect(() => {
     if (!layouts) return;
     refreshDeviceStates();
   }, [layouts])
+
+  useEffect(() => {
+    if (!layouts || !serverUpdateListener) return;
+    for (const {id: houseId} of layouts) {
+      serverUpdateListener.subscribe(houseId, updateDeviceState);
+    }
+  }, [layouts, serverUpdateListener]);
 
   return <div>
     {
@@ -62,7 +106,6 @@ export default function HomeDashboard() {
           activateMode={activateMode}
           togglePower={togglePower}
           changeBrightness={changeBrightness}
-          refreshDeviceStates={refreshDeviceStates}
         />)
     }
   </div>;
@@ -75,7 +118,6 @@ function HouseStatus(
     activateMode,
     togglePower,
     changeBrightness,
-    refreshDeviceStates
   }) {
 
   return <div>
