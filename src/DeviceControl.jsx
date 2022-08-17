@@ -5,7 +5,7 @@ import {createPortal} from "react-dom";
 export default function DeviceControl(
   {
     device: {id, name, state: {powerState, brightness, onBrightness}},
-    togglePower,
+    setPowerState,
     changeBrightness,
     disabled,
     className,
@@ -20,7 +20,7 @@ export default function DeviceControl(
 
   const [shouldShowBrightnessInput, setShouldShowBrightnessInput] = useState(false);
 
-  const onTogglePower = useCallback(() => togglePower(id), [togglePower, id]);
+  const onTogglePower = useCallback(() => setPowerState(id, powerState === 'false'), [setPowerState, id, powerState]);
   const showBrightnessInput = useCallback((event) => {
     event.preventDefault();
     setShouldShowBrightnessInput(true);

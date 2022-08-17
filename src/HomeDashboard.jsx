@@ -32,8 +32,8 @@ export default function HomeDashboard() {
     await request(MUTATION.ACTIVATE_MODE, {modeId});
   }, [refreshDeviceStates]);
 
-  const togglePower = useCallback(async (deviceId) => {
-    const powerState = JSON.stringify(deviceStateMap[deviceId].powerState === 'false');
+  const setPowerState = useCallback(async (deviceId, newPowerState) => {
+    const powerState = JSON.stringify(newPowerState);
     await request(MUTATION.SET_POWER, {deviceId, powerState})
   }, [refreshDeviceStates, deviceStateMap])
 
@@ -104,7 +104,7 @@ export default function HomeDashboard() {
           layout={layout}
           deviceStateMap={deviceStateMap}
           activateMode={activateMode}
-          togglePower={togglePower}
+          setPowerState={setPowerState}
           changeBrightness={changeBrightness}
         />)
     }
@@ -116,7 +116,7 @@ function HouseStatus(
     layout: {name, modes, rooms},
     deviceStateMap,
     activateMode,
-    togglePower,
+    setPowerState,
     changeBrightness,
   }) {
 
@@ -139,7 +139,7 @@ function HouseStatus(
           devices.map(({id, name}) => <DeviceControl
             key={id}
             device={{id, name, state: deviceStateMap[id]}}
-            togglePower={togglePower}
+            setPowerState={setPowerState}
             changeBrightness={changeBrightness}
           />)
         }
