@@ -24,11 +24,15 @@ export default class ServerUpdateListener {
   constructor(onClose) {
     this.onClose = onClose;
     this.subscriptions = {};
+    this.houseToSubscriptions = {};
     this.socket = null;
+    this.hasConnectBeenCalled = false;
+    this.isOpen = false
   }
 
   async connect() {
-    if (this.socket) return;
+    if (this.hasConnectBeenCalled) throw new Error('connect has already been called');
+    this.hasConnectBeenCalled = true;
 
     const accessToken = await getAccessToken();
     const header = Buffer.from(JSON.stringify({
@@ -58,6 +62,7 @@ export default class ServerUpdateListener {
       }
 
       const closeListener = () => {
+        this.isOpen = false;
         if (connectionStage === CONNECTION_STAGE.READY) {
           this.onClose();
         } else {
@@ -73,6 +78,7 @@ export default class ServerUpdateListener {
         }
 
         connectionStage = CONNECTION_STAGE.INITIALIZING;
+        console.log('websocket open; sending connection_init');
         this.socket.send(JSON.stringify({type: 'connection_init'}))
       }
 
@@ -93,7 +99,9 @@ export default class ServerUpdateListener {
         switch(eventData.type) {
           case 'connection_ack':
             if (connectionStage !== CONNECTION_STAGE.INITIALIZING) break;
+            console.log('connection_ack received');
             connectionStage = CONNECTION_STAGE.READY;
+            this.isOpen = true;
             resolve(this);
             return;
           case 'ka':
@@ -103,6 +111,10 @@ export default class ServerUpdateListener {
           case 'data':
             if (connectionStage !== CONNECTION_STAGE.READY) break;
             this._handleSubscriptionData(eventData);
+            return;
+          case 'complete':
+            if (connectionStage !== CONNECTION_STAGE.READY) break;
+            console.log(`complete received for ${eventData.id}`);
             return;
         }
 
@@ -121,6 +133,8 @@ export default class ServerUpdateListener {
   }
 
   async subscribe(houseId, callback) {
+    if (!this.isOpen) throw new Error('connection is not open');
+
     const id = uuid();
     const dataPojo = {
       query: SUBSCRIPTION,
@@ -137,9 +151,29 @@ export default class ServerUpdateListener {
       extensions,
     }
     this.socket.send(JSON.stringify({id, payload, type: 'start'}));
+
+    let houseSubscriptions = this.houseToSubscriptions[houseId];
+    if (!houseSubscriptions) {
+      houseSubscriptions = this.houseToSubscriptions[houseId] = new Set();
+    }
+    houseSubscriptions.add(id);
+
     this.subscriptions[id] = {
+      houseId,
       connectionStage: CONNECTION_STAGE.INITIALIZING,
       callback,
+    }
+  }
+
+  async unsubscribe(houseId) {
+    const subscriptions = this.houseToSubscriptions[houseId];
+    if (!subscriptions) return;
+
+    delete this.houseToSubscriptions[houseId];
+    for (const id of subscriptions) {
+      delete this.subscriptions[id];
+
+      if (this.isOpen) this.socket.send(JSON.stringify({id, type: 'stop'}));
     }
   }
 
@@ -160,18 +194,12 @@ export default class ServerUpdateListener {
 
     switch (type) {
       case 'start_ack':
-        if (subscription.connectionStage !== CONNECTION_STAGE.INITIALIZING) break;
-        subscription.connectionStage = CONNECTION_STAGE.READY;
-        return;
+        console.log(`start_ack received for ${id}`);
+        break;
       case 'data':
-        if (subscription.connectionStage !== CONNECTION_STAGE.READY) break;
         subscription.callback(payload);
-        return;
+        break;
     }
-
-    const error = new Error('unexpected subscription data');
-    error.data = {eventData};
-    console.error(error);
   }
 }
 
