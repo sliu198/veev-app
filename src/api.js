@@ -1,62 +1,61 @@
-const {getAccessToken} = require('./auth');
-
-const HOSTNAME = '5cyxxyn4bjho7b7zyqcn3vo3cm.appsync-api.us-east-1.amazonaws.com'
-const BASE_URL = `https://${HOSTNAME}/graphql`
+const HOSTNAME = '192.168.10.200:8090'
+const BASE_URL = `http://${HOSTNAME}/graphql`
 
 const QUERY = {
-  LIST_HOUSES: `{
-  ListHouses {
-    house_id
-    name
-  }
-}`,
-  GET_STRUCTURE: `query GetStructure($houseId: ID!) {
-  GetStructure(house_id: $houseId) {
+  GET_STRUCTURE: `query getHouseStructure {
+  getHouseStructure {
+    id
     name
     rooms {
-      room_id
+      id
       name
-      devices {
-        name
-        device_id
-        capabilities {
-          name
-        }
+    }
+  }
+}`,
+  LIST_ROOMS: `query listRooms {
+  listRooms {
+    id
+    name
+    devices {
+      deviceId
+      name
+      capabilities {
+        property
       }
     }
   }
 }`,
-  GET_DEVICES_STATES: `query GetDevicesStates($deviceIds: [ID!]) {
-  GetDevicesStates(device_ids: $deviceIds) {
+  GET_DEVICES_STATES: `query getEntitiesStates($deviceIds: [ID!]) {
+  getEntitiesStates(input: {entityType: DEVICE,  entitiesIds: $deviceIds}) {
     id
-    states {
-      name
-      value
+    capabilitiesStates {
+      capability
+      state
     }
   }
 }`,
-  GET_MODES: `query GetModes($houseId: ID!) {
-  GetModes(house_id: $houseId) {
-    id
+  GET_MODES: `query getScenes {
+  getScenes {
+    sceneId
     name
   }
 }`
 }
 
 const MUTATION = {
-  SET_BRIGHTNESS: `mutation SetBrightness($deviceId: ID!, $brightness: String!) {
-  UpdateDeviceState(device_id: $deviceId, capabilities: [{name: "brightness", value: $brightness}]) {
-    isSuccessful
+  SET_BRIGHTNESS: `mutation SetBrightness($deviceId: String!, $brightness: String!) {
+  updateDeviceState(input: {deviceId: $deviceId, states: [{property: "brightness", state: $brightness}]}) {
+    status
   }
 }`,
-  SET_POWER: `mutation TurnOn($deviceId: ID!, $powerState: String!) {
-  UpdateDeviceState(device_id: $deviceId, capabilities: [{name: "powerState", value: $powerState}]) {
-    isSuccessful
+  SET_POWER: `mutation TurnOn($deviceId: String!, $powerState: String!) {
+  updateDeviceState(input: {deviceId: $deviceId, states: [{property: "powerState", state: $powerState}]}) {
+    status
   }
 }`,
-  ACTIVATE_MODE: `mutation ActivateMode($modeId: ID!) {
-  ActivateMode(mode_id: $modeId) {
-    isSuccessful
+  ACTIVATE_MODE: `mutation activateScene($modeId: String!) {
+  activateScene(sceneId: $modeId) {
+    status
   }
 }`
 }
@@ -71,13 +70,11 @@ module.exports = {
 }
 
 async function request(query, variables) {
-  const accessToken = await getAccessToken();
 
   const response = await fetch(BASE_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': accessToken,
     },
     body: JSON.stringify({
       query,
@@ -129,27 +126,33 @@ async function request(query, variables) {
  * @returns {Promise<Array<House>>}
  */
 async function getLayouts() {
-  const {ListHouses: houses} = await request(QUERY.LIST_HOUSES, {});
   const layouts = [];
-  for (const {house_id: houseId, name} of houses) {
-    const house = {id: houseId, name, rooms: []}
-    layouts.push(house);
+  const house = {id: 0, rooms: []}
+  layouts.push(house);
 
-    const {GetModes: modes} = await request(QUERY.GET_MODES, {houseId});
-    house.modes = modes;
+  const roomIdMap = {}
 
-    const {GetStructure: floors} = await request(QUERY.GET_STRUCTURE, {houseId});
-    for (const {name: floorName, rooms} of floors) {
-      for (const {room_id: id, name: roomName, devices} of rooms) {
-        const room = {id, name: `${floorName}/${roomName}`, devices: []}
-        house.rooms.push(room);
+  const {getScenes: modes} = await request(QUERY.GET_MODES, null);
+  house.modes = modes.map(({sceneId: id, name}) => ({id, name}) );
 
-        for (const {device_id: id, name, capabilities} of devices) {
-          if (capabilities.some(({name}) => name === 'brightness')) {
-            const device = {id, name};
-            room.devices.push(device);
-          }
-        }
+  const {getHouseStructure: floors} = await request(QUERY.GET_STRUCTURE, null);
+  for (const {name: floorName, rooms} of floors) {
+    for (const {id, name: roomName} of rooms) {
+      const room = {id, name: `${floorName}/${roomName}`, devices: []}
+      roomIdMap[id] = room
+      house.rooms.push(room);
+
+      
+    }
+  }
+
+  const {listRooms: rooms} = await request(QUERY.LIST_ROOMS, null);
+  for (const {id, devices} of rooms) {
+    const room = roomIdMap[id]
+    for (const {deviceId: id, name, capabilities} of devices) {
+      if (capabilities.some(({property}) => property === 'brightness')) {
+        const device = {id, name};
+        room.devices.push(device);
       }
     }
   }
@@ -170,14 +173,14 @@ async function getLayouts() {
  * @returns {Promise<{[id:string]: DeviceState}>}
  */
 async function getDeviceStateMap(deviceIds) {
-  const {GetDevicesStates: devicesStates} = await request(QUERY.GET_DEVICES_STATES, {deviceIds});
+  const {getEntitiesStates: devicesStates} = await request(QUERY.GET_DEVICES_STATES, {deviceIds});
   const deviceStateMap = {};
-  for (const {id, states} of devicesStates) {
+  for (const {id, capabilitiesStates} of devicesStates) {
     const deviceState = {}
     deviceStateMap[id] = deviceState;
-    for (const {name, value} of states) {
-      if (['powerState', 'brightness', 'onBrightness'].includes(name)) {
-        deviceState[name] = value;
+    for (const {capability, state} of capabilitiesStates) {
+      if (['powerState', 'brightness', 'onBrightness'].includes(capability)) {
+        deviceState[capability] = state;
       }
     }
   }

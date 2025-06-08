@@ -3,13 +3,16 @@ import {randomBytes} from "crypto";
 import {forEach} from 'lodash';
 
 import {HOSTNAME} from './api';
-import {getAccessToken} from './auth';
 
-const URL = 'wss://5cyxxyn4bjho7b7zyqcn3vo3cm.appsync-realtime-api.us-east-1.amazonaws.com/graphql';
-const SUBSCRIPTION = `subscription OnServerEvent($houseId: String!) {
-  OnServerEvent(house_id: $houseId) {
-    name
-    payload
+const URL = `ws://${HOSTNAME}/subscriptions`;
+const SUBSCRIPTION = `subscription onStatesUpdated {
+  onStatesUpdated {
+    entityId
+    entityType
+    states {
+      capability
+      state
+    }
   }
 }`
 
@@ -33,14 +36,6 @@ export default class ServerUpdateListener {
   async connect() {
     if (this.hasConnectBeenCalled) throw new Error('connect has already been called');
     this.hasConnectBeenCalled = true;
-
-    const accessToken = await getAccessToken();
-    const header = Buffer.from(JSON.stringify({
-      Authorization: accessToken,
-      Host: HOSTNAME,
-    })).toString('base64')
-    const payload = Buffer.from('{}').toString('base64')
-    const query = `header=${encodeURIComponent(header)}&payload=${encodeURIComponent(payload)}`;
 
     // resolve this promise after receiving connection_ack
     return new Promise((resolve, reject) => {
@@ -124,7 +119,7 @@ export default class ServerUpdateListener {
         if (connectionStage !== CONNECTION_STAGE.READY) this.close();
       }
 
-      this.socket  = new WebSocket(`${URL}?${query}`, 'graphql-ws');
+      this.socket  = new WebSocket(`${URL}`, 'graphql-ws');
       this.socket.addEventListener('open', connectionOpenListener);
       this.socket.addEventListener('message', messageListener);
       this.socket.addEventListener('error', errorListener);
@@ -136,20 +131,10 @@ export default class ServerUpdateListener {
     if (!this.isOpen) throw new Error('connection is not open');
 
     const id = uuid();
-    const dataPojo = {
-      query: SUBSCRIPTION,
-      variables: {houseId}
-    };
-    const extensions = {
-      authorization: {
-        Authorization: await getAccessToken(),
-        host: HOSTNAME,
-      },
-    }
     const payload = {
-      data: JSON.stringify(dataPojo),
-      extensions,
-    }
+      query: SUBSCRIPTION,
+      variables: null
+    };
     this.socket.send(JSON.stringify({id, payload, type: 'start'}));
 
     let houseSubscriptions = this.houseToSubscriptions[houseId];

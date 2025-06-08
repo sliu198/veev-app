@@ -24,25 +24,13 @@ export default function useDeviceStateUpdater(layouts, setDeviceStateMap) {
   }, [layouts]);
 
   const updateDeviceState = useCallback((updatePayload) => {
-    const {data: {OnServerEvent: {name, payload}}} = updatePayload
-    if (name !== 'DEVICE_UPDATED') return;
+    const {data: {onStatesUpdated: {entityId: deviceId, states}}} = updatePayload
 
-    let payloadPojo;
-    try {
-      payloadPojo = JSON.parse(payload);
-    } catch (error) {
-      const rethrownError = new Error('error parsing device update payload');
-      rethrownError.data = {error, payload};
-      console.error(rethrownError);
-      return;
-    }
-
-    const {id: deviceId, states} = payloadPojo;
     setDeviceStateMap(deviceStateMap => {
       if (!deviceStateMap[deviceId]) return deviceStateMap;
 
       const deviceState = {};
-      for (const {name, value} of states) {
+      for (const {capability: name, state: value} of states) {
         deviceState[name] = value;
       }
 
