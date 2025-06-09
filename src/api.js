@@ -1,3 +1,5 @@
+import _ from 'lodash'
+
 const HOSTNAME = '192.168.10.200:8090'
 const BASE_URL = `http://${HOSTNAME}/graphql`
 
@@ -12,16 +14,20 @@ const QUERY = {
     }
   }
 }`,
+  GET_DEVICES: `query getDevices {
+  getDevices {
+    deviceId
+    name
+    type {
+      id
+    }
+  }
+}`,
   LIST_ROOMS: `query listRooms {
   listRooms {
     id
-    name
     devices {
       deviceId
-      name
-      capabilities {
-        property
-      }
     }
   }
 }`,
@@ -135,26 +141,41 @@ async function getLayouts() {
   const {getScenes: modes} = await request(QUERY.GET_MODES, null);
   house.modes = modes.map(({sceneId: id, name}) => ({id, name}) );
 
+  const {getDevices: allDevices} = await request(QUERY.GET_DEVICES, null);
+  const deviceMap = _.chain(allDevices)
+    .filter(({type: {id}}) => ['LIGHT', 'GROUP_LIGHT'].includes(id))
+    .map(({deviceId: id, name}) => ({id, name}))
+    .keyBy('id')
+    .value()
+
   const {getHouseStructure: floors} = await request(QUERY.GET_STRUCTURE, null);
   for (const {name: floorName, rooms} of floors) {
     for (const {id, name: roomName} of rooms) {
       const room = {id, name: `${floorName}/${roomName}`, devices: []}
       roomIdMap[id] = room
       house.rooms.push(room);
-
-      
     }
   }
 
   const {listRooms: rooms} = await request(QUERY.LIST_ROOMS, null);
   for (const {id, devices} of rooms) {
     const room = roomIdMap[id]
-    for (const {deviceId: id, name, capabilities} of devices) {
-      if (capabilities.some(({property}) => property === 'brightness')) {
-        const device = {id, name};
-        room.devices.push(device);
+    for (const {deviceId} of devices) {
+      const device = deviceMap[deviceId]
+      if (device) {
+        room.devices.push(device)
+        delete deviceMap[deviceId]
       }
     }
+  }
+  
+  const otherDevices = Object.values(deviceMap);
+  if (otherDevices.length) {
+    house.rooms.push({
+      id: -1,
+      name: "Other",
+      devices: otherDevices
+    })
   }
 
   return layouts;
